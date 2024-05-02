@@ -302,41 +302,56 @@ vec2 bend(vec2 p, vec2 c, float k)
 
 float SDF_Head_Base(vec3 query)
 {
+    const float headScale = 1.2f;
+    query /= headScale;
+
     float headTop = SDF_Sphere(query, vec3(0.f, 1.f, 0.f), 1.2f);
     float headBottom = opSmoothIntersection(
                 SDF_Box(query, vec3(0.5f, 0.2f, 0.5f)),
                 SDF_Sphere(query, vec3(0.f, 0.f, 0.f), 0.5f),
                 0.1f);
-    return opSmoothUnion(headTop, headBottom, 1.f);
+    return opSmoothUnion(headTop, headBottom, 1.f) * headScale;
 }
 
 float SDF_Head_Smile(vec3 query)
 {
+    const float headScale = 1.2f;
+    query /= headScale;
+
     float smileAngle = 80.f * PI / 180.f;
     return SDF_CappedTorus(
                 rotateX(rotateZ(query - vec3(0.f, 0.8f, 1.18f), 180.f), 7.5f),
                 vec2(sin(smileAngle), cos(smileAngle)),
-                0.25f, 0.02f);
+                0.25f, 0.02f) * headScale;
 }
 
 float SDF_Head_Eyes(vec3 query)
 {
-    return SDF_Sphere(vec3(abs(query.x), query.yz), vec3(0.5f, 1.05f, 0.97f), 0.15f);
+    const float headScale = 1.2f;
+    query /= headScale;
+
+    return SDF_Sphere(vec3(abs(query.x), query.yz), vec3(0.5f, 1.05f, 0.97f), 0.15f) * headScale;
 }
 
 float SDF_Head_Eyebrows(vec3 query)
 {
+    const float headScale = 1.2f;
+    query /= headScale;
+
     float eyebrowScale = 0.19f;
-    vec3 eyebrowQuery = vec3(abs(query.x), query.yz) - vec3(0.53f, 1.3f, 0.98f);
+    vec3 eyebrowQuery = vec3(abs(query.x), query.yz) - vec3(0.53f, 1.3f, 1.f);
+    eyebrowQuery = rotateX(eyebrowQuery, 10.f);
     return opSmoothIntersection(
                 SDF_Box(eyebrowQuery / eyebrowScale, vec3(0.5f, 0.2f, 0.5f)),
                 SDF_Sphere(eyebrowQuery / eyebrowScale, vec3(0.f, 0.f, 0.f), 0.4f),
-                0.1f) * eyebrowScale;
+                0.1f) * eyebrowScale * headScale;
 }
 
 float SDF_Head(vec3 query)
 {
     float result;
+
+    const float headScale = 1.2f;
 
     // Base
     result = SDF_Head_Base(query);
@@ -389,7 +404,102 @@ float SDF_Tentacle(vec3 query)
     return result;
 }
 
-float SDF_Cups(vec3 query)
+float SDF_Tentacles_Bottom_CutOut(vec3 query)
+{
+    float tentacleScale = 0.3f;
+    float tentacleAngle = 45.f / 2.f;
+    vec3 tentacleTrans = vec3(-1.7f, -0.5f, 0.f);
+
+    float tentacles = 1.f / 0.f;
+    for (int i = 0; i < 2; ++i)
+    {
+        vec3 tentacleQuery = vec3(-abs(query.x), query.y, -abs(query.z));
+        tentacleQuery = rotateY(tentacleQuery, 45.f * i + tentacleAngle);
+        tentacleQuery = rotateZ(tentacleQuery, -20.f);
+        tentacleQuery -= tentacleTrans;
+
+        vec3 q = tentacleQuery / tentacleScale;
+
+        // Transform
+        q = rotateZ(q, -135.f);
+
+        // Parameters
+        const float length = 2.f;
+        const float rA = 0.9f;
+        const float rB = 0.3f;
+        const float falloff = 0.05f;
+        const float maxR = max(rA, rB);
+
+        // Bend
+        q.xy = bend(q.xy, vec2(length, -1.5f), 0.5f);
+        q.xy = bend(q.xy, vec2(0.6f * length, -1.5f), 0.f);
+
+        // Shape
+        float result = SDF_Tentacle_Bottom_CutOut(q);
+
+        tentacles = min(tentacles, result * tentacleScale);
+    }
+    return tentacles;
+}
+
+float SDF_Tentacles_Full(vec3 query)
+{
+    float tentacleScale = 0.3f;
+    float tentacleAngle = 45.f / 2.f;
+    vec3 tentacleTrans = vec3(-1.7f, -0.5f, 0.f);
+
+    float tentacles = 1.f / 0.f;
+    for (int i = 0; i < 2; ++i)
+    {
+        vec3 tentacleQuery = vec3(-abs(query.x), query.y, -abs(query.z));
+        tentacleQuery = rotateY(tentacleQuery, 45.f * i + tentacleAngle);
+        tentacleQuery = rotateZ(tentacleQuery, -20.f);
+        tentacleQuery -= tentacleTrans;
+
+        vec3 q = tentacleQuery / tentacleScale;
+
+        // Transform
+        q = rotateZ(q, -135.f);
+
+        // Parameters
+        const float length = 2.f;
+        const float rA = 0.9f;
+        const float rB = 0.3f;
+        const float falloff = 0.05f;
+        const float maxR = max(rA, rB);
+
+        // Bend
+        q.xy = bend(q.xy, vec2(length, -1.5f), 0.5f);
+        q.xy = bend(q.xy, vec2(0.6f * length, -1.5f), 0.f);
+
+        // Shape
+        float result = SDF_RoundCone(q, vec3(0.f, 0.f, 0.f), vec3(length, 0.f, 0.f), rA, rB);
+
+        tentacles = min(tentacles, result * tentacleScale);
+    }
+    return tentacles;
+}
+
+float SDF_Tentacles(vec3 query)
+{
+    float tentacleScale = 0.3f;
+    float tentacleAngle = 45.f / 2.f;
+    vec3 tentacleTrans = vec3(-1.7f, -0.5f, 0.f);
+
+    float tentacles = 1.f / 0.f;
+    for (int i = 0; i < 2; ++i)
+    {
+        vec3 tentacleQuery = vec3(-abs(query.x), query.y, -abs(query.z));
+        tentacleQuery = rotateY(tentacleQuery, 45.f * i + tentacleAngle);
+        tentacleQuery = rotateZ(tentacleQuery, -20.f);
+        tentacleQuery -= tentacleTrans;
+
+        tentacles = min(tentacles, SDF_Tentacle(tentacleQuery / tentacleScale) * tentacleScale);
+    }
+    return tentacles;
+}
+
+float SDF_Cup(vec3 query)
 {
     float result;
     query = vec3(abs(query.x), query.yz);
@@ -416,37 +526,95 @@ float SDF_Cups(vec3 query)
     return result;
 }
 
+float SDF_Cups(vec3 query)
+{
+    const float tentacleAngle = 45.f / 2.f;
+
+    float result = 1.f / 0.f;
+    for (int i = 0; i < 2; ++i)
+    {
+        vec3 cupsQuery = vec3(-abs(query.x), query.y, abs(query.z));
+        cupsQuery = rotateY(cupsQuery, 45.f * i + tentacleAngle);
+        result = min(result, SDF_Cup(cupsQuery));
+    }
+
+    return result;
+}
+
 float SDF_Octopus(vec3 query)
 {
     float result;
 
     // Head
-    float headScale = 1.2f;
-    result = SDF_Head(query / headScale) * headScale;
+    result = SDF_Head(query);
 
     // Tentacles
-    float tentacleScale = 0.3f;
-    float tentacleAngle = 45.f / 2.f;
-    vec3 tentacleTrans = vec3(-1.7f, -0.5f, 0.f);
-
-    float tentacles = 1.f / 0.f;
-    for (int i = 0; i < 2; ++i)
-    {
-        vec3 tentacleQuery = vec3(-abs(query.x), query.y, -abs(query.z));
-        tentacleQuery = rotateY(tentacleQuery, 45.f * i + tentacleAngle);
-        tentacleQuery = rotateZ(tentacleQuery, -20.f);
-        tentacleQuery -= tentacleTrans;
-
-        tentacles = min(tentacles, SDF_Tentacle(tentacleQuery / tentacleScale) * tentacleScale);
-    }
-    result = smooth_min(result, tentacles, 0.3f);
+    result = smooth_min(result, SDF_Tentacles(query), 0.3f);
 
     // Cups
-    for (int i = 0; i < 2; ++i)
+    result = min(result, SDF_Cups(query));
+
+    return result;
+}
+
+BSDF BSDF_Octopus(vec3 query)
+{
+    vec3 baseAlbedo = vec3(0.91, 0.15f, 0.4f);
+    BSDF result = BSDF(query, SDF_Normal(query), baseAlbedo, 0.f, 0.45f, 0.f, 10000.f);
+
+    float body = SDF_Head_Base(query);
+    float tentacles = SDF_Tentacles(query);
+    float tentacles_bottom = SDF_Tentacles_Bottom_CutOut(query);
+    float tentacles_full = SDF_Tentacles_Full(query);
+    float cups = SDF_Cups(query);
+    float smile = SDF_Head_Smile(query);
+    float eyes = SDF_Head_Eyes(query);
+    float eyebrows = SDF_Head_Eyebrows(query);
+
+    float minDistance = body;
+
+    if (tentacles < minDistance)
     {
-        vec3 cupsQuery = vec3(-abs(query.x), query.y, abs(query.z));
-        cupsQuery = rotateY(cupsQuery, 45.f * i + tentacleAngle);
-        result = min(result, SDF_Cups(cupsQuery));
+        minDistance = tentacles;
+
+        if (tentacles_bottom > minDistance - 0.001f)
+        {
+            float tentContrib = smoothstep(-0.035f, -0.025f, tentacles_full);
+            float bodyContrib = 1.f - smoothstep(0.08f, 0.25f, body);
+            float accumContrib = clamp(sqrt(tentContrib * tentContrib + bodyContrib * bodyContrib), 0.f, 1.f);
+
+            result.albedo = mix(vec3(0.2f, 0.4f, 0.9f),
+                                baseAlbedo,
+                                accumContrib);
+        }
+    }
+    if (cups < minDistance)
+    {
+        minDistance = cups;
+
+        result.albedo = vec3(0.91, 0.15f, 0.9f);
+        result.roughness = 0.45f;
+    }
+    if (smile < minDistance)
+    {
+        minDistance = smile;
+
+        result.albedo = vec3(0.f);
+        result.roughness = 1.f;
+    }
+    if (eyes < minDistance)
+    {
+        minDistance = eyes;
+
+        result.albedo = vec3(0.f);
+        result.roughness = 0.05f;
+    }
+    if (eyebrows < minDistance)
+    {
+        minDistance = eyebrows;
+
+        result.albedo = mix(baseAlbedo, vec3(1.f), 0.3f);
+        result.roughness = 0.45f;
     }
 
     return result;
@@ -462,6 +630,7 @@ float sceneSDF(vec3 query) {
 
 BSDF sceneBSDF(vec3 query) {
 
-    return BSDF(query, SDF_Normal(query), vec3(1.f), 0.f, 0.9f, 0.f, 2.f);
+    //return BSDF(query, SDF_Normal(query), vec3(1.f), 0.f, 0.9f, 0.f, 2.f);
     //return BSDF_Wahoo(query);
+    return BSDF_Octopus(query);
 }
