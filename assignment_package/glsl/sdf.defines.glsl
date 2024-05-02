@@ -106,6 +106,26 @@ float SDF_RoundCone( vec3 query, vec3 a, vec3 b, float r1, float r2) {
                         return (sqrt(x2*a2*il2)+y*rr)*il2 - r1;
 }
 
+float SDF_Torus(vec3 query, vec2 t)
+{
+    vec2 q = vec2(length(query.xz) - t.x, query.y);
+    return length(q) - t.y;
+}
+
+float SDF_CappedTorus(vec3 query, vec2 sc, float ra, float rb)
+{
+    query.x = abs(query.x);
+    float k = (sc.y * query.x > sc.x * query.y) ? dot(query.xy, sc) : length(query.xy);
+    return sqrt(dot2(query) + ra * ra - 2.f * ra * k) - rb;
+}
+
+float SDF_Ellipsoid(vec3 query, vec3 r)
+{
+    float k0 = length(query / r);
+    float k1 = length(query / (r * r));
+    return k0 * (k0 - 1.f) / k1;
+}
+
 float smooth_min( float a, float b, float k ) {
     float h = max(k - abs(a - b), 0.0) / k;
     return min(a, b) - h * h * k * 0.25;
@@ -132,6 +152,18 @@ float opIntersection( float d1, float d2 ) {
     return max(d1,d2);
 }
 
+float opSmoothIntersection(float d1, float d2, float k)
+{
+    float h = clamp(0.5f - 0.5f * (d2 - d1) / k, 0.f, 1.f);
+    return mix(d2, d1, h) + k * h * (1.f - h);
+}
+
+float opSmoothUnion(float d1, float d2, float k)
+{
+    float h = clamp(0.5f + 0.5f * (d2 - d1) / k, 0.f, 1.f);
+    return mix(d2, d1, h) - k * h * (1.f - h);
+}
+
 float opOnion(float sdf, float thickness ) {
     return abs(sdf)-thickness;
 }
@@ -141,6 +173,14 @@ vec3 rotateX(vec3 p, float angle) {
     float c = cos(angle);
     float s = sin(angle);
     return vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z);
+}
+
+vec3 rotateY(vec3 p, float angle)
+{
+    angle = angle * 3.14159 / 180.f;
+    float c = cos(angle);
+    float s = sin(angle);
+    return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
 }
 
 vec3 rotateZ(vec3 p, float angle) {
@@ -250,15 +290,178 @@ vec3 subsurfaceAttenuation(vec3 albedo, float ambient, vec3 lightDir, vec3 norma
     return albedo * totalLight;
 }
 
+// https://www.shadertoy.com/view/3llfRl
+vec2 bend(vec2 p, vec2 c, float k)
+{
+    p -= c;
+    float ang = atan(p.x, p.y);
+    float len = length(p);
+    ang -= ang / sqrt(1.f + ang * ang) * (1.f - k);
+    return vec2(sin(ang), cos(ang)) * len + c;
+}
+
+float SDF_Head_Base(vec3 query)
+{
+    float headTop = SDF_Sphere(query, vec3(0.f, 1.f, 0.f), 1.2f);
+    float headBottom = opSmoothIntersection(
+                SDF_Box(query, vec3(0.5f, 0.2f, 0.5f)),
+                SDF_Sphere(query, vec3(0.f, 0.f, 0.f), 0.5f),
+                0.1f);
+    return opSmoothUnion(headTop, headBottom, 1.f);
+}
+
+float SDF_Head_Smile(vec3 query)
+{
+    float smileAngle = 80.f * PI / 180.f;
+    return SDF_CappedTorus(
+                rotateX(rotateZ(query - vec3(0.f, 0.8f, 1.18f), 180.f), 7.5f),
+                vec2(sin(smileAngle), cos(smileAngle)),
+                0.25f, 0.02f);
+}
+
+float SDF_Head_Eyes(vec3 query)
+{
+    return SDF_Sphere(vec3(abs(query.x), query.yz), vec3(0.5f, 1.05f, 0.97f), 0.15f);
+}
+
+float SDF_Head_Eyebrows(vec3 query)
+{
+    float eyebrowScale = 0.19f;
+    vec3 eyebrowQuery = vec3(abs(query.x), query.yz) - vec3(0.53f, 1.3f, 0.98f);
+    return opSmoothIntersection(
+                SDF_Box(eyebrowQuery / eyebrowScale, vec3(0.5f, 0.2f, 0.5f)),
+                SDF_Sphere(eyebrowQuery / eyebrowScale, vec3(0.f, 0.f, 0.f), 0.4f),
+                0.1f) * eyebrowScale;
+}
+
+float SDF_Head(vec3 query)
+{
+    float result;
+
+    // Base
+    result = SDF_Head_Base(query);
+
+    // Face
+    // Smile
+    result = min(result, SDF_Head_Smile(query));
+    // Eyes
+    result = min(result, SDF_Head_Eyes(query));
+    // Eyebrows
+    result = min(result, SDF_Head_Eyebrows(query));
+
+    return result;
+}
+
+float SDF_Tentacle_Bottom_CutOut(vec3 query)
+{
+    // Parameters
+    const float length = 2.f;
+    const float rA = 0.9f;
+    const float rB = 0.3f;
+    const float falloff = 0.05f;
+    const float maxR = max(rA, rB);
+
+    return SDF_Box(query - vec3(length / 2.f, -(maxR - falloff), 0.f), vec3(length, maxR, maxR * 2.f));
+}
+
+float SDF_Tentacle(vec3 query)
+{
+    vec3 q = query;
+
+    // Transform
+    q = rotateZ(q, -135.f);
+
+    // Parameters
+    const float length = 2.f;
+    const float rA = 0.9f;
+    const float rB = 0.3f;
+    const float falloff = 0.05f;
+    const float maxR = max(rA, rB);
+
+    // Bend
+    q.xy = bend(q.xy, vec2(length, -1.5f), 0.5f);
+    q.xy = bend(q.xy, vec2(0.6f * length, -1.5f), 0.f);
+
+    // Shape
+    float result = SDF_RoundCone(q, vec3(0.f, 0.f, 0.f), vec3(length, 0.f, 0.f), rA, rB);
+    result = opSmoothIntersection(result, SDF_Tentacle_Bottom_CutOut(q), 0.1f);
+
+    return result;
+}
+
+float SDF_Cups(vec3 query)
+{
+    float result;
+    query = vec3(abs(query.x), query.yz);
+    vec3 cupQuery;
+
+    const float rA = 0.03f;
+    const float rB = 0.015f;
+
+    cupQuery = query - vec3(0.f, -0.3f, 2.08f);
+    result = SDF_Torus(rotateX(cupQuery, 100.f), vec2(rA, rB));
+
+    cupQuery = query - vec3(0.055f, -0.5f, 2.09f);
+    result = min(result, SDF_Torus(rotateX(cupQuery, 85.f), vec2(rA, rB)));
+
+    cupQuery = query - vec3(0.075f, -0.7f, 2.01f);
+    result = min(result, SDF_Torus(rotateX(cupQuery, 53.f), vec2(rA, rB)));
+
+    cupQuery = query - vec3(0.085f, -0.85f, 1.8f);
+    result = min(result, SDF_Torus(rotateX(cupQuery, 22.f), vec2(rA, rB)));
+
+    cupQuery = query - vec3(0.085f, -0.885f, 1.5f);
+    result = min(result, SDF_Torus(rotateX(cupQuery, -10.f), vec2(rA, rB)));
+
+    return result;
+}
+
+float SDF_Octopus(vec3 query)
+{
+    float result;
+
+    // Head
+    float headScale = 1.2f;
+    result = SDF_Head(query / headScale) * headScale;
+
+    // Tentacles
+    float tentacleScale = 0.3f;
+    float tentacleAngle = 45.f / 2.f;
+    vec3 tentacleTrans = vec3(-1.7f, -0.5f, 0.f);
+
+    float tentacles = 1.f / 0.f;
+    for (int i = 0; i < 2; ++i)
+    {
+        vec3 tentacleQuery = vec3(-abs(query.x), query.y, -abs(query.z));
+        tentacleQuery = rotateY(tentacleQuery, 45.f * i + tentacleAngle);
+        tentacleQuery = rotateZ(tentacleQuery, -20.f);
+        tentacleQuery -= tentacleTrans;
+
+        tentacles = min(tentacles, SDF_Tentacle(tentacleQuery / tentacleScale) * tentacleScale);
+    }
+    result = smooth_min(result, tentacles, 0.3f);
+
+    // Cups
+    for (int i = 0; i < 2; ++i)
+    {
+        vec3 cupsQuery = vec3(-abs(query.x), query.y, abs(query.z));
+        cupsQuery = rotateY(cupsQuery, 45.f * i + tentacleAngle);
+        result = min(result, SDF_Cups(cupsQuery));
+    }
+
+    return result;
+}
+
 float sceneSDF(vec3 query) {
 
     //return SDF_Sphere(query, vec3(0.), 1.f);
-    return SDF_Wahoo(query);
+    //return SDF_Wahoo(query);
+    return SDF_Octopus(query);
 }
 
 
 BSDF sceneBSDF(vec3 query) {
 
-    return BSDF(query, SDF_Normal(query), vec3(1.f), 0.f, 0.25f, 0.f, 2.f);
+    return BSDF(query, SDF_Normal(query), vec3(1.f), 0.f, 0.9f, 0.f, 2.f);
     //return BSDF_Wahoo(query);
 }
