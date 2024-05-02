@@ -14,8 +14,31 @@ Ray rayCast() {
 }
 
 #define MAX_ITERATIONS 128
+#define MAX_ERROR 0.001f
 MarchResult raymarch(Ray ray) {
-    return MarchResult(-1, 0, BSDF(vec3(0.), vec3(0.), vec3(0.), 0., 0., 0.));
+    float t = 0.f;
+    int hitSomething = 0;
+    vec3 pos = ray.origin;
+
+    for (int i = 0; i < MAX_ITERATIONS; ++i)
+    {
+        // Sample the scene
+        float signedDistance = sceneSDF(pos);
+
+        // Mark a found intersection
+        if (signedDistance <= MAX_ERROR)
+        {
+            hitSomething = 1;
+            break;
+        }
+
+        // Update raymarching data
+        t += signedDistance;
+        pos = ray.origin + ray.direction * t;
+    }
+
+    // Sample the scene's bsdf at any found intersections
+    return MarchResult(t, hitSomething, sceneBSDF(pos));
 }
 
 void main()
