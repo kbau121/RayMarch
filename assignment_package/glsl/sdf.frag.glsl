@@ -49,6 +49,14 @@ void main()
     vec3 pos = ray.origin + result.t * ray.direction;
 
     vec3 color = metallic_plastic_LTE(bsdf, -ray.direction);
+    color += subsurfaceAttenuation(
+                bsdf.albedo,
+                bsdf.ao,
+                ray.direction,
+                bsdf.nor,
+                -ray.direction,
+                ambientOcclusion(bsdf.pos, bsdf.nor, bsdf.thinness)
+                ) * texture(u_DiffuseIrradianceMap, ray.direction).rgb * (1 - bsdf.metallic);
 
     // Reinhard operator to reduce HDR values from magnitude of 100s back to [0, 1]
     color = color / (color + vec3(1.0));

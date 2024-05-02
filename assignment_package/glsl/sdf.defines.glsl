@@ -47,6 +47,7 @@ struct BSDF {
     float metallic;
     float roughness;
     float ao;
+    float thinness;
 };
 
 struct MarchResult {
@@ -206,7 +207,7 @@ float SDF_Wahoo(vec3 query) {
 BSDF BSDF_Wahoo(vec3 query) {
     // Head base
     BSDF result = BSDF(query, normalize(query), pow(vec3(239, 181, 148) / 255., vec3(2.2)),
-                       0., 0.7, 1.);
+                       0., 0.7, 1., 0.);
 
     result.nor = SDF_Normal(query);
 
@@ -224,16 +225,40 @@ BSDF BSDF_Wahoo(vec3 query) {
     return result;
 }
 
+#define SEARCH_DISTANCE 0.085f
+float ambientOcclusion(vec3 pos, vec3 nor, float thinness)
+{
+    float ambientOcclusion = 0.f;
+    for (int i = 1; i <= 5; ++i)
+    {
+        float distance = max(0.f, -sceneSDF(pos + nor * i * SEARCH_DISTANCE));
+        ambientOcclusion += (i * SEARCH_DISTANCE - distance) / pow(2, i);
+    }
+
+    return clamp(1.f - thinness * ambientOcclusion, 0.f, 1.f);
+}
+
+#define DISTORTION 0.2f
+#define GLOW 6.f
+#define SCALE 3.f
+vec3 subsurfaceAttenuation(vec3 albedo, float ambient, vec3 lightDir, vec3 normal, vec3 viewVec, float thinness)
+{
+    vec3 scatterDir = lightDir + normal * DISTORTION;
+    float lightReachingEye = pow(clamp(dot(viewVec, -scatterDir), 0.f, 1.f), GLOW) * SCALE;
+    float attenuation = max(0.f, dot(normal, lightDir) + dot(viewVec, -lightDir));
+    float totalLight = attenuation * (lightReachingEye + ambient) * thinness;
+    return albedo * totalLight;
+}
+
 float sceneSDF(vec3 query) {
 
-    return SDF_Sphere(query, vec3(0.), 1.f);
-//    return SDF_Wahoo(query);
+    //return SDF_Sphere(query, vec3(0.), 1.f);
+    return SDF_Wahoo(query);
 }
 
 
 BSDF sceneBSDF(vec3 query) {
 
-    return BSDF(query, SDF_Normal(query), vec3(0.5, 0, 0),
-                0.5, 0.5, 1.);
-//    return BSDF_Wahoo(query);
+    return BSDF(query, SDF_Normal(query), vec3(1.f), 0.f, 0.25f, 0.f, 2.f);
+    //return BSDF_Wahoo(query);
 }
