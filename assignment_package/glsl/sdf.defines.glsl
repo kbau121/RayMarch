@@ -61,6 +61,24 @@ struct SmoothMinResult {
     float material_t;
 };
 
+float random(vec2 n)
+{
+    return fract(sin(dot(n, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+vec3 random3(vec3 n)
+{
+    return vec3(fract(sin(dot(n, vec3(52.1641, 73.1643,  1.5813)) + 634.4123) * 24793.7922),
+                fract(sin(dot(n, vec3(69.1924, 19.2589, 81.1293)) + 429.5131) * 62478.7389),
+                fract(sin(dot(n, vec3(51.1249, 20.5139, 13.1332)) + 891.3553) * 57130.5178));
+}
+
+#define REPEAT_SCALE 15.f
+vec3 Repeat_Index(vec3 query)
+{
+    return vec3(round(query / REPEAT_SCALE));
+}
+
 float dot2( in vec2 v ) { return dot(v,v); }
 float dot2( in vec3 v ) { return dot(v,v); }
 float ndot( in vec2 a, in vec2 b ) { return a.x*b.x - a.y*b.y; }
@@ -541,6 +559,13 @@ float SDF_Cups(vec3 query)
     return result;
 }
 
+vec3 Repeat_Octopus(vec3 query)
+{
+    query = query - REPEAT_SCALE * Repeat_Index(query);
+
+    return query;
+}
+
 float SDF_Octopus(vec3 query)
 {
     float result;
@@ -620,17 +645,132 @@ BSDF BSDF_Octopus(vec3 query)
     return result;
 }
 
+float SDF_Repeat_Octopus(vec3 query)
+{
+    vec3 offset = normalize(random3(Repeat_Index(query)));
+    query -= offset * 3.f;
+    query = Repeat_Octopus(query);
+    query = rotateX(query, offset.x * 360.f);
+    query = rotateY(query, offset.y * 360.f);
+    query = rotateZ(query, offset.z * 360.f);
+
+    return SDF_Octopus(query);
+}
+
+// https://stackoverflow.com/questions/15095909/from-rgb-to-hsv-in-opengl-glsl
+vec3 rgb2hsv(vec3 c)
+{
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+vec3 hsv2rgb(vec3 c)
+{
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+BSDF BSDF_Repeat_Octopus(vec3 query)
+{
+    ivec3 index = ivec3(Repeat_Index(query));
+    vec3 offset = normalize(random3(Repeat_Index(query)));
+
+    vec3 baseAlbedo = vec3(0.91, 0.15f, 0.4f);
+    baseAlbedo = offset;
+
+    vec3 baseHSV = rgb2hsv(baseAlbedo);
+
+    vec3 cupHSV = vec3(mod(baseHSV.x + 0.125f, 1.f), mix(baseHSV.y, 1.f, 0.5f), mix(baseHSV.z, 1.f, 0.5f));
+    vec3 cupAlbedo = hsv2rgb(cupHSV);
+
+    vec3 bottomHSV = vec3(mod(baseHSV.x + 0.25f, 1.f), mix(baseHSV.y, 0.f, 0.f), baseHSV.z);
+    vec3 bottomAlbedo = hsv2rgb(bottomHSV);
+
+    vec3 nor = SDF_Normal(query);
+
+    query -= offset * 3.f;
+    query = Repeat_Octopus(query);
+    query = rotateX(query, offset.x * 360.f);
+    query = rotateY(query, offset.y * 360.f);
+    query = rotateZ(query, offset.z * 360.f);
+
+    BSDF result = BSDF(query, nor, baseAlbedo, 0.f, 0.45f, 0.f, 2.f);
+
+    float body = SDF_Head_Base(query);
+    float tentacles = SDF_Tentacles(query);
+    float tentacles_bottom = SDF_Tentacles_Bottom_CutOut(query);
+    float tentacles_full = SDF_Tentacles_Full(query);
+    float cups = SDF_Cups(query);
+    float smile = SDF_Head_Smile(query);
+    float eyes = SDF_Head_Eyes(query);
+    float eyebrows = SDF_Head_Eyebrows(query);
+
+    float minDistance = body;
+
+    if (tentacles < minDistance)
+    {
+        minDistance = tentacles;
+
+        if (tentacles_bottom > minDistance - 0.001f)
+        {
+            float tentContrib = smoothstep(-0.035f, -0.025f, tentacles_full);
+            float bodyContrib = 1.f - smoothstep(0.08f, 0.25f, body);
+            float accumContrib = clamp(sqrt(tentContrib * tentContrib + bodyContrib * bodyContrib), 0.f, 1.f);
+
+            result.albedo = mix(bottomAlbedo, baseAlbedo, accumContrib);
+        }
+    }
+    if (cups < minDistance)
+    {
+        minDistance = cups;
+
+        result.albedo = cupAlbedo;
+        result.roughness = 0.45f;
+    }
+    if (smile < minDistance)
+    {
+        minDistance = smile;
+
+        result.albedo = vec3(0.f);
+        result.roughness = 1.f;
+    }
+    if (eyes < minDistance)
+    {
+        minDistance = eyes;
+
+        result.albedo = vec3(0.f);
+        result.roughness = 0.05f;
+    }
+    if (eyebrows < minDistance)
+    {
+        minDistance = eyebrows;
+
+        result.albedo = mix(baseAlbedo, vec3(1.f), 0.3f);
+        result.roughness = 0.45f;
+    }
+
+    return result;
+}
+
 float sceneSDF(vec3 query) {
 
     //return SDF_Sphere(query, vec3(0.), 1.f);
     //return SDF_Wahoo(query);
-    return SDF_Octopus(query);
+    //return SDF_Octopus(query);
+    return SDF_Repeat_Octopus(query);
 }
 
 
 BSDF sceneBSDF(vec3 query) {
 
-    //return BSDF(query, SDF_Normal(query), vec3(1.f), 0.f, 0.9f, 0.f, 2.f);
+    //return BSDF(query, SDF_Normal(query), vec3(1.f), 0.f, 0.2f, 0.f, 2.f);
     //return BSDF_Wahoo(query);
-    return BSDF_Octopus(query);
+    //return BSDF_Octopus(query);
+    return BSDF_Repeat_Octopus(query);
 }
