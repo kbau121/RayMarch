@@ -3,6 +3,20 @@ Signed Distance Fields and Subsurface Scattering
 
 **University of Pennsylvania, CIS 561: Advanced Computer Graphics, Homework 8**
 
+Submission
+------------
+Kyle Bauer<br>kbau121
+
+Late Day 3/3 used.
+
+![](Output/subsurface_yes.png)
+
+![](Output/subsurface_no.png)
+
+![](Output/octopus.png)
+
+![](Output/octopi.png)
+
 Overview
 ------------
 Now that you have a real-time approximation of a microfacet BSDF, you will use
