@@ -7,7 +7,7 @@ Ray Marching
 
 Ray marching is a method of rendering 3D objects by iteratively stepping along rays cast out by the camera and into the scene. When moving along this ray, functions called signed distance fields (SDFs) tell us how far away we are from any given object. SDFs not only tell us if we have hit an object, but also how far we might need to move to hit an object. Using those two properties we can create complex 3D geometry in real-time that would normally be very expensive to create using triangles.
 
-Consider the below above. We would need an infinite number of infinitely small triangles here to create a perfectly smooth sphere, or we would need a specialized equation to figure out the collision between our view and the sphere - this second option, while acceptable for primitive objects like spheres, does not scale well with complexity. SDFs get around this by simply answering the question, "at some point along my ray, how far away am I from this sphere?" and ray marching does the rest by traversing along the ray by that queried distance.
+Consider the above sphere. We would need an infinite number of infinitely small triangles here to create a perfectly smooth sphere, or we would need a specialized equation to figure out the collision between our view and the sphere - this second option, while acceptable for primitive objects like spheres, does not scale well with complexity. SDFs get around this by simply answering the question, "at some point along my ray, how far away am I from this sphere?" and ray marching does the rest by traversing along the ray by that queried distance.
 
 <div align="center">
   <img src="Output/Wahoo.png"/>
