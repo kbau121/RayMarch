@@ -2,15 +2,15 @@ Ray Marching
 ======================
 
 <div align="center">
-  <img src="Output/Wahoo.png"/>
+  <img src="Output/subsurface_no_crop.png"/>
 </div>
 
 Ray marching is a method of rendering 3D objects by iteratively stepping along rays cast out by the camera and into the scene. When moving along this ray, functions called signed distance fields (SDFs) tell us how far away we are from any given object. SDFs not only tell us if we have hit an object, but also how far we might need to move to hit an object. Using those two properties we can create complex 3D geometry in real-time that would normally be very expensive to create using triangles.
 
-Consider the below sphere. We would need an infinite number of infinitely small triangles here to create a perfectly smooth sphere, or we would need a specialized equation to figure out the collision between our view and the sphere - this second option, while acceptable for primitive objects like spheres, does not scale well with complexity. SDFs get around this by simply answering the question, "at some point along my ray, how far away am I from this sphere?" and ray marching does the rest by traversing along the ray by that queried distance.
+Consider the below above. We would need an infinite number of infinitely small triangles here to create a perfectly smooth sphere, or we would need a specialized equation to figure out the collision between our view and the sphere - this second option, while acceptable for primitive objects like spheres, does not scale well with complexity. SDFs get around this by simply answering the question, "at some point along my ray, how far away am I from this sphere?" and ray marching does the rest by traversing along the ray by that queried distance.
 
 <div align="center">
-  <img src="Output/subsurface_no_crop.png"/>
+  <img src="Output/Wahoo.png"/>
 </div>
 
 Now spheres are fine and all, but what if we wanted to make something more complex (like a friendly little octopus)? SDFs work great for these kinds of shape too since we can combine two of these functions [in a number of ways](https://iquilezles.org/articles/distfunctions/#:~:text=Primitive%20combinations). This let's us make a nice round friend:
