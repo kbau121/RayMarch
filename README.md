@@ -13,13 +13,13 @@ Consider the above sphere. We would need an infinite number of infinitely small 
   <img src="Output/Wahoo.png"/>
 </div>
 
-Now spheres are fine and all, but what if we wanted to make something more complex (like a friendly little octopus)? SDFs work great for these kinds of shape too since we can combine two of these functions [in a number of ways](https://iquilezles.org/articles/distfunctions/#:~:text=Primitive%20combinations). This let's us make a nice round friend:
+Now spheres are fine and all, but what if we wanted to make something more complex (like a friendly little octopus)? SDFs work great for these kinds of shapes too since we can combine two of these functions [in a number of ways](https://iquilezles.org/articles/distfunctions/#:~:text=Primitive%20combinations). This lets us make a nice round friend:
 
 <div align="center">
   <img src="Output/octopus_crop.png"/>
 </div>
 
-But we wouldn't want them to be lonely, we can give him some friends too. Since our SDFs are just the distance from some surface to our ray, we can pretend our ray is looping through a box with our octopus in it (i.e. when it hits the edge of the box it loops to the other side). When our ray does this looping action, it finds another octopus to sample, and we have then created an infinite number of octopi with relatively low performance cost compared to an infinite number of possible ray-mesh intersections in a traditional rasterization or ray tracing approach.
+But we wouldn't want him to be lonely, we can give him some friends too. Since our SDFs are just the distance from some surface to our ray, we can pretend our ray is looping through a box with our octopus in it (i.e. when it hits the edge of the box it loops to the other side). When our ray does this looping action, it finds another octopus to sample. We can continue to iterate through an infinite field of ocotopi for as long as we want. The cost of running this SDF is much less when compared to the ballooning cost of ray-mesh intersections in a rapidly expanding scene.
 
 <div align="center">
   <img src="Output/Octopus.gif"/>
